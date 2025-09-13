@@ -1,13 +1,12 @@
 { pkgs,  config, ... }:
 {
-  env.GREET = "devenv";
-  env.BUILD_OUTFILE = "out/main";
-  env.BUILD_INFILE = "main.c";
+  env.BUILD_OUTDIR = "out/";
+  env.BUILD_DEFAULT_FILE = "main.c";
+  env.MallocNanoZone = "0"; # prevent ASan issues on macOS
 
   packages = with pkgs; [ 
     clang clang-tools bear
     gdb
-    raylib
     lolcat boxes
   ];
 
@@ -18,12 +17,12 @@
           mkdir out
         fi
       '';
-      before = [ "ray:build-commands" ];
+      before = [ "dev:build-commands" ];
     };
-    "ray:build-commands" = {
+    "dev:build-commands" = {
       exec = ''
         if [[ ! -f compile_commands.json ]]; then
-          ray-build-commands
+          dev-build-commands
         fi
       '';
       before = [ "devenv:enterShell" ];
@@ -31,22 +30,31 @@
   };
 
   scripts = {
-    ray-build-commands.exec = ''
+    dev-build-commands.exec = ''
       cd ${config.env.DEVENV_ROOT};
-      bear -- ray-build
+      input="''${1:-${config.env.BUILD_DEFAULT_FILE}}";
+
+      bear -- dev-build
     '';
-    ray-build.exec = ''
+    dev-build.exec = ''
       cd ${config.env.DEVENV_ROOT};
+      input="''${1:-${config.env.BUILD_DEFAULT_FILE}}";
+      output="${config.env.BUILD_OUTDIR}/$(basename $input .c)";
+
       clang \
         -Wall -Wextra -std=c99 \
         -I${pkgs.raylib}/include \
         -I${pkgs.clang}/resource-root/include \
         -L${pkgs.raylib}/lib -lraylib \
         -framework CoreVideo -framework IOKit -framework Cocoa -framework GLUT -framework OpenGL \
-        -o ${config.env.BUILD_OUTFILE} ${config.env.BUILD_INFILE}
+        -o "$output" "$input"
     '';
-    ray-run.exec = ''
-      ray-build && ${config.env.DEVENV_ROOT}/${config.env.BUILD_OUTFILE}
+    dev-run.exec = ''
+      cd ${config.env.DEVENV_ROOT}
+      input="''${1:-${config.env.BUILD_DEFAULT_FILE}}";
+      output="${config.env.BUILD_OUTDIR}/$(basename $input .c)";
+
+      dev-build "$input" && "$output"
     '';
   };
 
@@ -55,9 +63,9 @@
       Dev Environment loaded!
       
       Available commands:
-        - ray-build           : Build the program
-        - ray-run             : Build and run the program
-        - ray-build-commands  : Generate compile_commands.json for clang tooling
+        - dev-build [filename]  : Build the program (defaults to main.c)
+        - dev-run [filename]    : Build and run the program (defaults to main.c)
+        - dev-build-commands    : Generate compile_commands.json for clang tooling
     EOF
   '';
 }
